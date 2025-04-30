@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1.0">
+  <title>JEE Question Timer</title>
+  <style>
+    /* ==== Reset & Base ==== */
+    * { margin:0; padding:0; box-sizing:border-box }
+    html,body{ height:100%; font-family:'Segoe UI', Tahoma, sans-serif }
+    body{ display:flex; align-items:center; justify-content:center;
+      background:var(--bg,hsl(0,0%,90%)); color:var(--text,#333);
+      transition:background .3s,color .3s }
+    .card{ background:var(--card-bg,#fff); border-radius:12px;
+      box-shadow:0 4px 12px rgba(0,0,0,.1); padding:2rem;
+      text-align:center; width:360px }
+    h1{ font-size:1.75rem; margin-bottom:1rem; color:var(--title,#1a202c) }
+    .hidden{ display:none }
+    .btn{ background:var(--btn-bg,#3182ce); color:var(--btn-text,#fff);
+      border:none; border-radius:6px; padding:.5rem 1rem;
+      font-size:.95rem; cursor:pointer; margin:.3rem;
+      transition:background .2s }
+    .btn:hover{ background:var(--btn-hover,#2b6cb0) }
+    .toolbar{ margin-top:1.5rem; display:flex; justify-content:space-around }
+
+    /* ==== Timer ==== */
+    #timer{ font-size:var(--timer-size,4rem); font-weight:300;
+      margin:1rem 0; color:var(--timer-color,#2d3748) }
+
+    /* ==== Recent ==== */
+    .recent-list{ list-style:none; margin-top:1rem; text-align:left;
+      max-height:100px; overflow-y:auto }
+    .recent-item{ display:flex; justify-content:space-between;
+      align-items:center; padding:.3rem 0; border-bottom:1px solid #eee }
+    .recent-item button{ padding:.2rem .5rem; font-size:.8rem }
+
+    /* ==== Slider & Switch ==== */
+    input[type=range]{ -webkit-appearance:none; width:100%; margin:1rem 0 }
+    input[type=range]:focus{ outline:none }
+    input[type=range]::-webkit-slider-runnable-track{
+      height:6px; background:#ddd; border-radius:3px }
+    input[type=range]::-webkit-slider-thumb{
+      -webkit-appearance:none; width:16px; height:16px;
+      background:var(--btn-bg,#3182ce); border-radius:50%; cursor:pointer;
+      margin-top:-5px }
+    .switch{ position:relative; display:inline-block;
+      width:50px; height:24px; margin:.5rem }
+    .switch input{ display:none }
+    .slider-switch{ position:absolute; top:0; left:0;
+      right:0; bottom:0; background:#ccc; border-radius:24px;
+      transition:.3s }
+    .slider-switch:before{ content:""; position:absolute;
+      height:18px; width:18px; left:3px; bottom:3px;
+      background:#fff; border-radius:50%; transition:.3s }
+    input:checked + .slider-switch{ background:var(--btn-bg,#3182ce) }
+    input:checked + .slider-switch:before{ transform:translateX(26px) }
+    label{ display:block; margin-top:1rem; font-size:.95rem }
+    .settings div{ text-align:left; margin-bottom:.5rem }
+
+    /* ==== Music Player ==== */
+    .music-player{ margin-top:1.5rem }
+    .music-controls{ display:flex; align-items:center; justify-content:center }
+    .btn-arrow{ background:none; border:none;
+      font-size:1.5rem; padding:.25rem .5rem;
+      cursor:pointer; transition:transform .2s }
+    .btn-arrow:hover{ transform:scale(1.2) }
+    .music-toolbar{ display:flex; justify-content:center;
+      gap:.5rem; margin-top:.5rem }
+
+    /* ==== Track List (slide) ==== */
+    .track-list{ overflow:hidden; max-height:0;
+      opacity:0; transition:max-height .4s ease, opacity .4s ease;
+      border-top:1px solid #eee; margin-top:.75rem; }
+    .track-list.open{ max-height:200px; opacity:1; }
+    .track-item{ display:flex; justify-content:space-between;
+      align-items:center; padding:.25rem 0; border-bottom:1px solid #f0f0f0 }
+    .track-item span{ font-size:.9rem; cursor:pointer; flex:1; text-align:left; }
+    .track-item span:hover{ text-decoration:underline }
+    .track-item button{ background:transparent; border:none;
+      cursor:pointer; font-size:.9rem; color:#c00; padding:0 .3rem }
+
+    /* ==== Modal ==== */
+    .modal-overlay{ position:fixed; top:0; left:0;
+      right:0; bottom:0; background:rgba(0,0,0,.4);
+      display:none; align-items:center; justify-content:center;
+      z-index:1000 }
+    .modal{ background:var(--card-bg,#fff); padding:1rem;
+      border-radius:8px; width:90%; max-width:320px;
+      box-shadow:0 4px 12px rgba(0,0,0,.2) }
+    .modal input[type=text], .modal textarea{
+      width:100%; margin-bottom:.5rem; border:1px solid #ccc;
+      border-radius:4px; padding:.5rem }
+    .modal textarea{ height:80px; resize:vertical }
+    .modal .btn{ width:48% }
+  </style>
+</head>
+<body tabindex="0">
+
+  <!-- SETUP CARD -->
+  <div class="card" id="setup">
+    <h1>Select Duration</h1>
+    <div>
+      <button class="btn" data-minutes="2">2 Min</button>
+      <button class="btn" data-minutes="3">3 Min</button>
+      <button class="btn" data-minutes="4">4 Min</button>
+      <button class="btn" data-minutes="5">5 Min</button>
+    </div>
+    <label>Custom (Min): <span id="customLabel">10</span></label>
+    <input type="range" id="customSlider" min="1" max="60" value="10">
+    <button class="btn" id="setCustomBtn">Set Custom</button>
+    <ul class="recent-list" id="recentList"></ul>
+    <div class="toolbar">
+      <button class="btn" id="openSettingsBtn">Settings (S)</button>
+    </div>
+
+    <!-- MUSIC PLAYER -->
+    <div class="music-player">
+      <div class="music-controls">
+        <button id="prevTrack" class="btn-arrow">‹</button>
+        <iframe id="spotifyFrame" style="border-radius:12px;margin:0 .5rem"
+          src="" width="100%" height="152" frameborder="0"
+          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+          loading="lazy"></iframe>
+        <button id="nextTrack" class="btn-arrow">›</button>
+      </div>
+      <div class="music-toolbar">
+        <button id="loopBtn" class="btn">Loop: Off</button>
+        <button id="addTrackBtn" class="btn">+ Add Track</button>
+        <button id="manageBtn" class="btn">Manage Tracks</button>
+      </div>
+      <div id="trackList" class="track-list">
+        <ul id="tracksUl"></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- TIMER CARD -->
+  <div class="card hidden" id="timerCard">
+    <h1>Question Timer</h1>
+    <div id="timer">00:00</div>
+    <div id="message">SPACE: start/stop | ENTER: reset | ESC: change | S: settings</div>
+    <div class="toolbar">
+      <button class="btn" id="changeBtn">Change Duration</button>
+      <button class="btn" id="settingsBtn">Settings</button>
+    </div>
+  </div>
+
+  <!-- SETTINGS CARD -->
+  <div class="card hidden" id="settingsCard">
+    <h1>Settings</h1>
+    <div class="settings">
+      <div>
+        <label>Theme</label>
+        <label class="switch">
+          <input type="checkbox" id="themeToggle"><span class="slider-switch"></span>
+        </label>
+      </div>
+      <div>
+        <label>Direction</label>
+        <label class="switch">
+          <input type="checkbox" id="directionToggle"><span class="slider-switch"></span>
+        </label>
+      </div>
+      <div>
+        <label for="timerSizeRange">Timer Size (3–6rem)</label>
+        <input type="range" id="timerSizeRange" min="3" max="6" step="0.5" value="4">
+      </div>
+      <div>
+        <label for="bgColorRange">Background Lightness (50–95%)</label>
+        <input type="range" id="bgColorRange" min="50" max="95" step="5" value="90">
+      </div>
+    </div>
+    <div class="toolbar">
+      <button class="btn" id="closeSettingsBtn">Close</button>
+    </div>
+  </div>
+
+  <!-- ADD TRACK MODAL -->
+  <div id="addModal" class="modal-overlay">
+    <div class="modal">
+      <h2>Add Spotify Track</h2>
+      <input id="newTrackName" type="text" placeholder="Song Name">
+      <textarea id="newTrackInput" placeholder="Paste Spotify URL …/track/ID"></textarea>
+      <div style="display:flex; justify-content:space-between">
+        <button id="cancelAdd" class="btn">Cancel</button>
+        <button id="confirmAdd" class="btn">Add</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ==== TIMER & SETTINGS ====
+    const setupCard = document.getElementById('setup'),
+          timerCard = document.getElementById('timerCard'),
+          settingsCard = document.getElementById('settingsCard');
+
+    // Timer elements
+    const presetBtns = setupCard.querySelectorAll('.btn[data-minutes]'),
+          customSlider = document.getElementById('customSlider'),
+          customLabel = document.getElementById('customLabel'),
+          setCustomBtn = document.getElementById('setCustomBtn'),
+          recentList = document.getElementById('recentList');
+
+    // Display & controls
+    const timerDisplay = document.getElementById('timer'),
+          msg = document.getElementById('message'),
+          changeBtn = document.getElementById('changeBtn'),
+          openSettingsBtn = document.getElementById('openSettingsBtn'),
+          settingsBtn = document.getElementById('settingsBtn'),
+          closeSettingsBtn = document.getElementById('closeSettingsBtn');
+
+    // Settings controls
+    const themeToggle = document.getElementById('themeToggle'),
+          directionToggle = document.getElementById('directionToggle'),
+          timerSizeRange = document.getElementById('timerSizeRange'),
+          bgColorRange = document.getElementById('bgColorRange');
+
+    let duration = 0, timerId = null, startTime = null, running = false;
+    let recent = [];
+
+    function formatTime(s){
+      const m = Math.floor(s/60).toString().padStart(2,'0'),
+            sec = Math.floor(s%60).toString().padStart(2,'0');
+      return `${m}:${sec}`;
+    }
+    function beep(){
+      const ctx = new (AudioContext||webkitAudioContext)(),
+            osc = ctx.createOscillator();
+      osc.type='square'; osc.frequency.setValueAtTime(1200,ctx.currentTime);
+      osc.connect(ctx.destination); osc.start(); osc.stop(ctx.currentTime+0.7);
+    }
+
+    function saveSettings(){
+      localStorage.setItem('jeeTimerOpts', JSON.stringify({
+        theme: themeToggle.checked,
+        direction: directionToggle.checked,
+        size: timerSizeRange.value,
+        bg: bgColorRange.value
+      }));
+    }
+    function loadSettings(){
+      const s = localStorage.getItem('jeeTimerOpts');
+      if(s) try{
+        const o = JSON.parse(s);
+        themeToggle.checked=o.theme;
+        directionToggle.checked=o.direction;
+        timerSizeRange.value=o.size;
+        bgColorRange.value=o.bg;
+      }catch{}
+    }
+
+    function applySettings(){
+      if(themeToggle.checked){
+        document.documentElement.style.setProperty('--bg','#2d3748');
+        document.documentElement.style.setProperty('--card-bg','#4a5568');
+        document.documentElement.style.setProperty('--text','#edf2f7');
+        document.documentElement.style.setProperty('--title','#e2e8f0');
+        document.documentElement.style.setProperty('--btn-bg','#805ad5');
+        document.documentElement.style.setProperty('--btn-hover','#6b46c1');
+      } else {
+        document.documentElement.style.removeProperty('--card-bg');
+        document.documentElement.style.removeProperty('--text');
+        document.documentElement.style.removeProperty('--title');
+        document.documentElement.style.removeProperty('--btn-bg');
+        document.documentElement.style.removeProperty('--btn-hover');
+      }
+      document.documentElement.style.setProperty('--bg',`hsl(0,0%,${bgColorRange.value}%)`);
+      document.documentElement.style.setProperty('--timer-size',`${timerSizeRange.value}rem`);
+    }
+
+    function saveRecent(){
+      localStorage.setItem('jeeTimerRecent', JSON.stringify(recent));
+    }
+    function loadRecent(){
+      const r = localStorage.getItem('jeeTimerRecent');
+      if(r) try{
+        const arr = JSON.parse(r);
+        if(Array.isArray(arr)) recent=arr;
+      }catch{}
+    }
+
+    function renderRecent(){
+      recentList.innerHTML='';
+      recent.forEach((m,i)=>{
+        const li=document.createElement('li');
+        li.className='recent-item';
+        li.innerHTML=`
+          <span>${m} Min</span>
+          <div>
+            <button class="btn set" data-i="${i}">Set</button>
+            <button class="btn del" data-i="${i}">Del</button>
+          </div>`;
+        recentList.appendChild(li);
+      });
+      recentList.querySelectorAll('.set').forEach(b=>
+        b.onclick=e=>selectDuration(recent[e.target.dataset.i]*60)
+      );
+      recentList.querySelectorAll('.del').forEach(b=>
+        b.onclick=e=>{ recent.splice(e.target.dataset.i,1); renderRecent(); saveRecent(); }
+      );
+    }
+
+    function startTimer(){
+      if(running) return;
+      running=true;
+      startTime=Date.now();
+      msg.textContent='';
+      timerId=setInterval(()=>{
+        const elapsed=(Date.now()-startTime)/1000,
+              val=directionToggle.checked
+                  ? Math.min(elapsed,duration)
+                  : Math.max(duration-elapsed,0);
+        timerDisplay.textContent=formatTime(val);
+        if(elapsed>=duration){
+          clearInterval(timerId);
+          running=false;
+          msg.textContent="Time's up!";
+          beep();
+        }
+      },250);
+    }
+    function stopTimer(){
+      if(!running) return;
+      clearInterval(timerId);
+      running=false;
+      const elapsed=(Date.now()-startTime)/1000,
+            used=directionToggle.checked
+                ? Math.min(elapsed,duration)
+                : Math.min(duration,elapsed);
+      timerDisplay.textContent=formatTime(used);
+      msg.textContent=`Solved in ${formatTime(used)}`;
+    }
+    function resetTimer(){
+      clearInterval(timerId);
+      running=false;
+      timerDisplay.textContent=directionToggle.checked?'00:00':formatTime(duration);
+      msg.textContent='SPACE: start/stop | ENTER: reset | ESC: change | S: settings';
+    }
+    function show(card){
+      [setupCard,timerCard,settingsCard].forEach(c=>c.classList.add('hidden'));
+      card.classList.remove('hidden');
+      document.body.focus();
+    }
+    function selectDuration(sec){
+      duration=sec; resetTimer(); applySettings(); show(timerCard);
+    }
+
+    // Wire timer events
+    presetBtns.forEach(b=>b.onclick=()=>selectDuration(b.dataset.minutes*60));
+    customSlider.oninput=()=>customLabel.textContent=customSlider.value;
+    setCustomBtn.onclick=()=>{
+      const m=parseInt(customSlider.value);
+      if(m>0){ recent.push(m); renderRecent(); saveRecent(); }
+    };
+    changeBtn.onclick=()=>{ resetTimer(); show(setupCard) };
+    openSettingsBtn.onclick=()=>{ loadSettings(); applySettings(); resetTimer(); show(settingsCard) };
+    settingsBtn.onclick=()=>{ loadSettings(); applySettings(); resetTimer(); show(settingsCard) };
+    closeSettingsBtn.onclick=()=>{ resetTimer(); show(timerCard.classList.contains('hidden')?setupCard:timerCard) };
+    [themeToggle,directionToggle,timerSizeRange,bgColorRange].forEach(el=>
+      el.onchange=()=>{ applySettings(); resetTimer(); saveSettings(); }
+    );
+    window.addEventListener('keydown',e=>{
+      if(!setupCard.classList.contains('hidden')&&e.key==='s'){
+        e.preventDefault(); loadSettings(); applySettings(); resetTimer(); show(settingsCard);
+      }
+      if(!timerCard.classList.contains('hidden')){
+        if(e.code==='Space'){ e.preventDefault(); running?stopTimer():startTimer() }
+        else if(e.code==='Enter'){ e.preventDefault(); resetTimer() }
+        else if(e.code==='Escape'){ e.preventDefault(); resetTimer(); show(setupCard) }
+        else if(e.key==='s'){ e.preventDefault(); loadSettings(); applySettings(); resetTimer(); show(settingsCard) }
+      }
+    });
+
+    // ==== MUSIC PLAYER & TRACK MANAGEMENT ====
+    const spotifyFrame = document.getElementById('spotifyFrame'),
+          prevBtn      = document.getElementById('prevTrack'),
+          nextBtn      = document.getElementById('nextTrack'),
+          loopBtn      = document.getElementById('loopBtn'),
+          addBtn       = document.getElementById('addTrackBtn'),
+          manageBtn    = document.getElementById('manageBtn'),
+          trackListDiv = document.getElementById('trackList'),
+          tracksUl     = document.getElementById('tracksUl'),
+          modal        = document.getElementById('addModal'),
+          nameField    = document.getElementById('newTrackName'),
+          inputField   = document.getElementById('newTrackInput'),
+          cancelAdd    = document.getElementById('cancelAdd'),
+          confirmAdd   = document.getElementById('confirmAdd');
+
+    let tracks=[], currentIndex=0, loopMode=false;
+
+    function loadTracks(){
+      const s=localStorage.getItem('jeeTimerTracks');
+      if(s) tracks=JSON.parse(s);
+      else {
+        tracks=[
+          {name:'Blinding Lights',url:'https://open.spotify.com/embed/track/0K9g7Spk2zY40WkJRd7Ora?utm_source=generator'},
+          {name:'Levitating',      url:'https://open.spotify.com/embed/track/2wVA6heYVIiQ4j2aLdomda?utm_source=generator'},
+          {name:'Peaches',         url:'https://open.spotify.com/embed/track/2u1K929oTMdB6OyQk9YeOu?utm_source=generator'}
+        ];
+        localStorage.setItem('jeeTimerTracks',JSON.stringify(tracks));
+      }
+    }
+    function saveTracks(){ localStorage.setItem('jeeTimerTracks',JSON.stringify(tracks)); }
+
+    function setTrack(i){
+      if(!tracks.length) return;
+      currentIndex=(i+tracks.length)%tracks.length;
+      spotifyFrame.src=tracks[currentIndex].url;
+    }
+    prevBtn.onclick=()=>setTrack(currentIndex-1);
+    nextBtn.onclick=()=>setTrack(loopMode?currentIndex:currentIndex+1);
+    loopBtn.onclick=()=>{
+      loopMode=!loopMode;
+      loopBtn.textContent=loopMode?'Loop: On':'Loop: Off';
+    };
+
+    // Add modal
+    addBtn.onclick=()=>{
+      nameField.value=''; inputField.value='';
+      modal.style.display='flex'; nameField.focus();
+    };
+    cancelAdd.onclick=()=>modal.style.display='none';
+    modal.onclick=e=>{ if(e.target===modal) modal.style.display='none'; };
+    confirmAdd.onclick=()=>{
+      const nm=nameField.value.trim(),
+            url=inputField.value.trim(),
+            m=url.match(/open\.spotify\.com\/track\/([A-Za-z0-9]+)/);
+      if(!nm) alert('Enter a name');
+      else if(m&&m[1]){
+        const embed=`https://open.spotify.com/embed/track/${m[1]}?utm_source=generator`;
+        tracks.push({name:nm,url:embed});
+        saveTracks();
+        setTrack(tracks.length-1);
+        renderTrackList();
+        modal.style.display='none';
+      } else alert('Invalid URL');
+    };
+
+    // Manage list
+    function renderTrackList(){
+      tracksUl.innerHTML='';
+      tracks.forEach((t,i)=>{
+        const li=document.createElement('li');
+        li.className='track-item';
+        li.innerHTML=`<span data-i="${i}">${t.name}</span><button data-i="${i}">&times;</button>`;
+        tracksUl.appendChild(li);
+      });
+      // click to play
+      tracksUl.querySelectorAll('span').forEach(el=>{
+        el.onclick=()=>setTrack(+el.dataset.i);
+      });
+      // remove
+      tracksUl.querySelectorAll('button').forEach(btn=>{
+        btn.onclick=e=>{
+          const i=+btn.dataset.i;
+          tracks.splice(i,1);
+          saveTracks();
+          if(currentIndex>=tracks.length) currentIndex=tracks.length-1;
+          setTrack(currentIndex);
+          renderTrackList();
+        };
+      });
+    }
+    manageBtn.onclick=()=>{
+      const open=trackListDiv.classList.toggle('open');
+      trackListDiv.classList.toggle('hidden',!open);
+      manageBtn.textContent=open?'Hide Tracks':'Manage Tracks';
+      if(open) renderTrackList();
+    };
+
+    // ==== INIT ====
+    loadSettings(); loadRecent(); loadTracks();
+    applySettings(); renderRecent();
+    setTrack(0); show(setupCard);
+  </script>
+</body>
+</html>
